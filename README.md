@@ -11,3 +11,4 @@ Important notes:
 - some Ordinary differential equations crash due to the algorithm not being able to solve it... although most Ordinary differential equations work fine
 - There may be inaccuracy with the results, it's normal considering that this is a computer algorithm
 - All constants resulting from integrating (whenever solving ODEs using integrating factors or exact methods) are automatically replaced with 1, which may result in some inaccuracy but we weren't able to design an algorithm that correctly handles the constants
+- This program uses standard computer algorithm operators (+ - * ^ % and so on)
