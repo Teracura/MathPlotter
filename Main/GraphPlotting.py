@@ -6,47 +6,57 @@ import numpy as np
 from scipy.integrate import solve_ivp
 import re
 from scipy.interpolate import interp1d
+from sympy.parsing.sympy_parser import null
 
 
 class GraphPlotter:
+    expression = null
+    fig, ax = plt.subplots()
+    x = sp.Symbol('x')
+    y = sp.Function('y')(x)
 
     def __init__(self):
         pass
 
+    def refresh_graph(self):
+        self.fig.clear()
+        self.ax.clear()
+        self.fig, self.ax = plt.subplots()
+    def solve(self, text_input):
+        type_of_equation = self.discover_equation_type(text_input)
+        if type_of_equation == "ode":
+            sol = self.solve_ode(self.expression)
+            self.plot_solution(sol.t, sol.y[0], f"ODE: {self.expression}")
+        elif type_of_equation == "algebraic":
+            self.solve_algebraic(self.expression, self.x, self.y)
+        else:
+            print("unknown type")
+
     def preprocess_equation(self, text_input):
         text_input = re.sub(r"y'", "dy_dx", text_input)
-
         return text_input
 
-    def create_plot(self, text_input):
-        global y_expr, is_diff
-        x = sp.Symbol('x')
-        y = sp.Function('y')(x)
-
+    def discover_equation_type(self, text_input):
         processed_input = self.preprocess_equation(text_input)
-
         try:
-
-            expr = sp.sympify(processed_input, locals={"pi": sp.pi, "e": sp.E, "y": y, "x": x})
+            # turns expression to a form understood by sympy
+            self.expression = sp.sympify(processed_input, locals={"pi": sp.pi, "e": sp.E, "y": self.y, "x": self.x})
         except (sp.SympifyError, TypeError):
             print("Invalid equation input")
             return
-
         if "dy_dx" in processed_input:
-            self.solve_ode(expr, x, y)
+            return "ode"
         else:
-            self.solve_algebraic(expr, x, y)
+            return "algebraic"
 
-    def solve_ode(self, expr, x, y):
-        """Solves and plots first-order ODEs using SciPy."""
+    def solve_ode(self, expr):
         try:
             dydx = sp.solve(expr, "dy_dx")  # Extract dy/dx
             if not dydx:
                 print("Could not solve for dy/dx.")
                 return
-
-            dydx_func = sp.lambdify((x, y), dydx[0], "numpy")
-
+            # converts function to a form understood by numpy
+            dydx_func = sp.lambdify((self.x, self.y), dydx[0], "numpy")
         except Exception as e:
             print(f"ODE Parsing Error: {e}")
             return
@@ -55,17 +65,15 @@ class GraphPlotter:
         def ode_system(t, y_val):
             return dydx_func(t, y_val)
 
-        x_vals = np.linspace(0, 200, 200)
-        y0 = [1]
-
-        sol = solve_ivp(ode_system, [x_vals[0], x_vals[-1]], y0, t_eval=x_vals)
-
-        self.plot_solution(sol.t, sol.y[0], f"ODE: {expr}")
+        x_vals = np.linspace(0, 200, 200)  # plot limits from 0 to 200 with 200 points
+        y0 = [1]  # initial value
+        sol = solve_ivp(ode_system, [x_vals[0], x_vals[-1]], y0,
+                        t_eval=x_vals)  # integrates function for exact solution
+        return sol
 
     def solve_algebraic(self, expr, x, y):
-        """Solves and plots algebraic equations using SymPy."""
         try:
-            solutions = sp.solve(expr, y)
+            solutions = sp.solve(expr, y)  # Extract y
             if not solutions:
                 print("No real solutions found for y.")
                 return
@@ -73,45 +81,37 @@ class GraphPlotter:
             print(f"Algebraic Parsing Error: {e}")
             return
 
-        x_values = np.linspace(0, 200, 200)
-        fig, ax = plt.subplots()
-        ax.set_title('Algebraic Equation Solution')
-        ax.set_xlabel('X-axis')
-        ax.set_ylabel('Y-axis')
-        ax.grid(True)
-
+        x_vals = np.linspace(0, 200, 200)
         for sol in solutions:
             y_func = sp.lambdify(x, sol, "numpy")
-            y_values = np.real_if_close(y_func(x_values))
-            ax.plot(x_values, y_values, label=f"y = {sol}")
+            y_vals = np.real_if_close(y_func(x_vals))
+            self.plot_solution(x_vals, y_vals, "Numerical Solution")
 
-        self.show_plot(fig, ax)
+        self.show_plot()
 
     def plot_solution(self, x_vals, y_vals, title):
         """Plots numerical solutions."""
-        fig, ax = plt.subplots()
-        ax.set_title(title)
-        ax.set_xlabel('X-axis')
-        ax.set_ylabel('Y-axis')
-        ax.grid(True)
-        ax.plot(x_vals, y_vals, label="Numerical Solution")
 
-        self.show_plot(fig, ax)
+        self.ax.set_title(title)
+        self.ax.set_xlabel('X-axis')
+        self.ax.set_ylabel('Y-axis')
+        self.ax.grid()
+        self.ax.plot(x_vals, y_vals, label=f"function: {self.expression}")
 
-    def show_plot(self, fig, ax):
+        self.show_plot()
+
+    def show_plot(self):
         plot_module = tk.Toplevel()
         plot_module.title("Graph output")
         plot_module.geometry("1000x1000")
-
-        canvas = FigureCanvasTkAgg(fig, master=plot_module)
+        canvas = FigureCanvasTkAgg(self.fig, master=plot_module)
         canvas.get_tk_widget().pack(pady=20, fill=tk.BOTH, expand=True)
-
-        ax.legend()
+        self.ax.legend()
         canvas.draw()
         plot_module.update()
+        fig, ax = plt.subplots()
 
     def open_euler_window(self, equation):
-
         euler_module = tk.Toplevel()
         euler_module.title("Graph output")
         euler_module.geometry("500x300")
@@ -176,13 +176,12 @@ class GraphPlotter:
     def solve_euler(self, equation, x0, y0, h, x):
         x_vals = [x0]  # Store x points
         y_vals = [y0]  # Store y points
-
         while x0 < x:
-            y0 = y0 + float(h) * float(self.evaluate_euler(equation, x0, y0))
-            x0 = x0 + h
+            y0 = y0 + h * self.evaluate_euler(equation, x0, y0) # euler's equation for y
+            x0 = x0 + h # euler's equation for x
             x_vals.append(x0)
             y_vals.append(y0)
-
+        # vvv convert to a value readable by numpy
         x_vals = np.array(x_vals)
         y_vals = np.array(y_vals)
         x_smooth = np.linspace(min(x_vals), max(x_vals), 500)
@@ -190,23 +189,11 @@ class GraphPlotter:
         self.plot_euler_solution(x_smooth, y_smooth, x_vals, y_vals)
 
     def plot_euler_solution(self, x_smooth, y_smooth, x_vals, y_vals):
-
         plt.figure(figsize=(8, 6))
-        fig, ax = plt.subplots()
-
-        plot_module = tk.Toplevel()
-        plot_module.title("Graph output")
-        plot_module.geometry("1000x1000")
-
-        canvas = FigureCanvasTkAgg(fig, master=plot_module)
-        canvas.get_tk_widget().pack(pady=20, fill=tk.BOTH, expand=True)
-
-        ax.plot(x_smooth, y_smooth, linestyle='-', color='b', label="Euler's Approximation")
-        ax.scatter(x_vals, y_vals, color='red', s=10, label="Euler Points")  # Mark actual points
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.set_title("Euler's Method Approximation")
-        ax.grid()
-        ax.legend()
-        canvas.draw()
-        plot_module.update()
+        self.ax.plot(x_smooth, y_smooth, linestyle='-', color='b', label="Euler's Approximation")
+        self.ax.scatter(x_vals, y_vals, color='red', s=5, label="Euler Points")  # Mark actual points
+        self.ax.set_xlabel("x_axis")
+        self.ax.set_ylabel("y_axis")
+        self.ax.set_title("Euler's Method Approximation")
+        self.ax.grid()
+        self.show_plot()
