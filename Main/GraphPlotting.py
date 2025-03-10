@@ -27,8 +27,11 @@ class GraphPlotter:
         if type_of_equation == "ode":
             sol = self.solve_ode(self.expression)
             self.plot_solution(sol.t, sol.y[0], f"ODE: {self.expression}")
+            self.show_plot()
         elif type_of_equation == "algebraic":
             self.solve_algebraic(self.expression, self.x, self.y)
+            self.show_plot()
+
         else:
             print("unknown type")
 
@@ -87,8 +90,6 @@ class GraphPlotter:
             y_vals = np.real_if_close(y_func(x_vals))
             self.plot_solution(x_vals, y_vals, "Numerical Solution")
 
-        self.show_plot()
-
     def plot_solution(self, x_vals, y_vals, title):
         """Plots numerical solutions."""
 
@@ -98,7 +99,7 @@ class GraphPlotter:
         self.ax.grid()
         self.ax.plot(x_vals, y_vals, label=f"function: {self.expression}")
 
-        self.show_plot()
+
 
     def show_plot(self):
         plot_module = tk.Toplevel()
